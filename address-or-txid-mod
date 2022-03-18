@@ -1,0 +1,53 @@
+from openpyxl import load_workbook
+import os
+import shutil
+import requests
+
+INPUT_PATH = 'input/'
+OUTPUT_PATH = 'output/'
+
+search_column = ('Transaction Details', 'Transaction ID', 'Transaction Detail')
+prefix = 'https://www.blockchain.com/btc/tx/'
+
+#ad or tx
+mode = 'ad'
+
+if mode == 'ad':
+    search_column = ('Destination Address',)
+    prefix = 'https://www.blockchain.com/btc/address/'
+   
+
+_, _, files = next(os.walk(INPUT_PATH))
+
+for file in files:
+    print(f'Working with {file}')
+    work_book = load_workbook(f'{INPUT_PATH}{file}')
+   
+    for worksheet_idx in range(len(work_book.worksheets)):
+        tx_id_idx = None
+        bc_url_idx = None
+        work_book.active = worksheet_idx
+        work_sheet = work_book.active
+        print(f'Working with sheet {work_sheet.title}')
+       
+        for column_idx, column_name in enumerate(work_sheet[1]):
+            if column_name.value in search_column:
+                tx_id_idx = column_idx
+            elif column_name.value == 'Blockchain URL':
+                bc_url_idx = column_idx
+
+        row_count = work_sheet.max_row
+       
+        for row_idx in range(2, row_count + 1):
+            print(f'Working with row #{row_idx}/{row_count}')
+            if tx_id_idx is not None and bc_url_idx is not None:
+                tx_id = work_sheet[row_idx][tx_id_idx].value
+                bc_link = f'{prefix}{tx_id}'
+                try:
+                    if tx_id and requests.get(bc_link).ok:
+                        work_sheet[row_idx][bc_url_idx].value = '=HYPERLINK("{}", "{}")'.format(bc_link, 'Blockchain.com')
+                except Exception:
+                    work_sheet[row_idx][bc_url_idx].value = 'ERROR'
+
+    work_book.save(f'{INPUT_PATH}{file}')                        
+    shutil.move(f'{INPUT_PATH}{file}', f'{OUTPUT_PATH}{file}')
